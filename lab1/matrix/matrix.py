@@ -1,5 +1,6 @@
 from __future__ import annotations
-from pprint import pprint
+import math
+
 
 class Matrix:
 
@@ -147,11 +148,11 @@ class Matrix:
         for i in range(n):
             for k in range(i, n):
                 total = sum(l[i][j] * u[j][k] for j in range(i))
-                u[i][k] = A[i][k] - total
+                u[i][k] = self[i][k] - total
 
             for k in range(i, n):
                 total = sum(l[k][j] * u[j][i] for j in range(i))
-                l[k][i] = (A[k][i] - total) / u[i][i]
+                l[k][i] = (self[k][i] - total) / u[i][i]
 
         return l, u
 
@@ -170,7 +171,7 @@ class Matrix:
 
         return det
 
-    def inverse_matrix(self) -> Matrix:
+    def inverse_matrix_lu(self) -> Matrix:
         rows, columns = self.rows_cols_count()
         indentity_matrix = Matrix(rows, columns, is_indentity=True)
         inverse_matrix = Matrix(rows, columns)
@@ -180,6 +181,7 @@ class Matrix:
             inverse_matrix[i] = solve_lu(self, indentity_column)
 
         return inverse_matrix
+
 
 
 def solve_lu(A: Matrix, b: Matrix) -> Matrix:
@@ -202,22 +204,65 @@ def solve_lu(A: Matrix, b: Matrix) -> Matrix:
     return x
 
 
+def is_equal_with_accuracy(a, b, rel_tol=1e-9, abs_tol=1e-9) -> bool:
+    return math.isclose(a, b, rel_tol=rel_tol, abs_tol=abs_tol)
 
-if __name__ == '__main__':
-    A = Matrix()
-    A.read_file('A.txt')
 
-    b = Matrix()
-    b.read_file('b.txt')
+def check_solution(A: Matrix, b: Matrix, x: Matrix) -> bool:
+    for row in range(A.rows_count()):
+        total = 0
+        for column in range(A.cols_count()):
+            total += A[row][column] * x[column][0]
+        if not is_equal_with_accuracy(total, b[row][0]):
+            return False
+    return True
 
-    L, U = A.lu_decomposition()
-    print(f'L:', L, sep='\n', end='\n\n')
-    print(f'U:', U, sep='\n', end='\n\n')
 
-    print(f'X:', solve_lu(A, b), sep='\n', end='\n\n')
+def get_three_diagonals(
+    matrix: Matrix
+) -> tuple[list[float], list[float], list[float]]:
+    a, b, c = [], [], []
 
-    print(f'det(A):', A.determinant(), sep='\n', end='\n\n')
+    for i in range(matrix.rows_count()):
+        for j in range(matrix.cols_count()):
+            elem = matrix[i][j]
+            if i == j + 1:
+                a.append(elem)
+            elif i == j:
+                b.append(elem)
+            elif i == j - 1:
+                c.append(elem)
 
-    print(f'A^(-1):', A.inverse_matrix(), sep='\n', end='\n\n')
+    return a, b, c
 
-    print(f'A * A^(-1):', A * A.inverse_matrix(), sep='\n', end='\n\n')
+
+def thomas_algorithm(A: Matrix, d: Matrix) -> Matrix:
+    n = d.rows_count()
+    a, b, c = get_three_diagonals(A)
+
+    if len(a) != n - 1 or len(b) != n or len(c) != n - 1:
+        raise ValueError(
+            'Неверные длины диагоналей. '
+            'Ожидаемые длины: a = n - 1, b = n, c = n - 1'
+        )
+
+    alpha = [0] * n
+    beta = [0] * n
+    x = [0] * n
+
+    alpha[0] = c[0] / b[0]
+    beta[0] = d[0][0] / b[0]
+
+    for i in range(1, n):
+        a_i = a[i - 1] if i < n else 0
+        c_i = c[i] if i < n - 1 else 0
+
+        denominator = b[i] - a_i * alpha[i - 1]
+        alpha[i] = c_i / denominator if i < n - 1 else 0
+        beta[i] = (d[i][0] - a_i * beta[i - 1]) / denominator
+
+    x[-1] = beta[-1]
+    for i in reversed(range(n - 1)):
+        x[i] = beta[i] - alpha[i] * x[i + 1]
+
+    return Matrix(from_list=[[elem] for elem in x])
