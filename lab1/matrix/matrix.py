@@ -2,6 +2,9 @@ from __future__ import annotations
 import math
 
 
+FLOAT_ROUND = 7
+
+
 class Matrix:
 
     def __init__(
@@ -11,7 +14,7 @@ class Matrix:
         from_filepath: str = None
     ) -> None:
         if from_list:
-            self.__matrix = from_list
+            self.__matrix = from_list.copy()
             self.__rows, self.__cols = len(from_list), len(from_list[0])
             return
 
@@ -30,6 +33,9 @@ class Matrix:
             ]
             for i in range(self.__rows)
         ]
+
+    def copy(self) -> Matrix:
+        return Matrix(from_list=[row[:] for row in self.__matrix])
 
     def rows_count(self) -> int:
         return self.__rows
@@ -69,7 +75,7 @@ class Matrix:
         )
         return '\n'.join(
             ' '.join(
-                str(round(self.__matrix[i][j], 2)).rjust(max_num_width)
+                str(round(self.__matrix[i][j], FLOAT_ROUND)).rjust(max_num_width)
                 for j in range(self.__cols)
             )
             for i in range(self.__rows)
@@ -110,6 +116,17 @@ class Matrix:
         raise TypeError(
             f'Не предусмотрено поведение для типа данных {type(index)}.'
         )
+
+    def __add__(self, other: Matrix) -> Matrix:
+        if (
+            self.rows_count() != other.rows_count()
+            or self.cols_count() != other.cols_count()
+        ):
+            raise ValueError('При сложении размеры матриц должны совпадать.')
+        return Matrix(from_list=[
+            [self[i][j] + other[i][j] for j in range(self.cols_count())]
+            for i in range(self.rows_count())
+        ])
 
     def __mul__(self, other: int | float | Matrix) -> Matrix:
         n, m = self.rows_cols_count()
@@ -152,6 +169,8 @@ class Matrix:
 
             for k in range(i, n):
                 total = sum(l[k][j] * u[j][i] for j in range(i))
+                # Реализовать выбор главного элемента
+                # Помнить число перестановок
                 l[k][i] = (self[k][i] - total) / u[i][i]
 
         return l, u
@@ -181,7 +200,6 @@ class Matrix:
             inverse_matrix[i] = solve_lu(self, indentity_column)
 
         return inverse_matrix
-
 
 
 def solve_lu(A: Matrix, b: Matrix) -> Matrix:
@@ -266,3 +284,51 @@ def thomas_algorithm(A: Matrix, d: Matrix) -> Matrix:
         x[i] = beta[i] - alpha[i] * x[i + 1]
 
     return Matrix(from_list=[[elem] for elem in x])
+
+
+def jacobi(
+    A: Matrix, b: Matrix,
+    tol: float = 1e-9, max_iterations: int = 1000
+) -> Matrix:
+    n = b.rows_count()
+    x = Matrix(n, 1)
+
+    for k in range(max_iterations):
+        print(f'iter: {k}')
+        x_new = Matrix(n, 1)
+        for i in range(n):
+            sigma = sum(A[i][j] * x[j][0] for j in range(n) if i != j)
+            x_new[i][0] = (b[i][0] - sigma) / A[i][i]
+
+        diff = max(abs(x_new[i][0] - x[i][0]) for i in range(n))
+        if diff < tol:
+            break
+
+        x = x_new.copy()
+
+    return x
+
+
+def seidel(
+    A: Matrix, b: Matrix,
+    tol: float = 1e-9, max_iterations: int = 1000
+) -> Matrix:
+    n = b.rows_count()
+    x = Matrix(n, 1)
+
+    for _ in range(max_iterations):
+        print(f'iter: {_}')
+        x_new = x.copy()
+
+        for i in range(n):
+            sum1 = sum(A[i][j] * x_new[j][0] for j in range(i))
+            sum2 = sum(A[i][j] * x[j][0] for j in range(i + 1, n))
+            x_new[i][0] = (b[i][0] - sum1 - sum2) / A[i][i]
+
+        converge = all(abs(x_new[i][0] - x[i][0]) < tol for i in range(n))
+        if converge:
+            break
+
+        x = x_new
+
+    return x
