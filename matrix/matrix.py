@@ -1,6 +1,8 @@
 from __future__ import annotations
 import math
 
+from .utils import is_equal_with_accuracy
+
 
 FLOAT_ROUND = 7
 
@@ -8,7 +10,9 @@ FLOAT_ROUND = 7
 class Matrix:
 
     def __init__(
-        self, rows: int = 0, cols: int = 0,
+        self,
+        rows: int = 0,
+        cols: int = 0,
         is_indentity: bool = False,
         from_list: None | list[list[float]] = None,
         from_filepath: str = None
@@ -34,8 +38,40 @@ class Matrix:
             for i in range(self.__rows)
         ]
 
+    @staticmethod
+    def from_list(lst: list[list[float]]) -> Matrix:
+        assert len(lst) != 0 and len(lst[0]) != 0
+        return Matrix(rows=len(lst), cols=len(lst[0]), from_list=lst)
+
+    @staticmethod
+    def from_file(filepath: str) -> Matrix | None:
+        try:
+            with open(filepath, 'r', encoding='utf-8') as file:
+                rows, cols = map(int, file.readline().split(' '))
+                list_matrix = [
+                    list(map(float, file.readline().split(' ')))
+                    for _ in range(rows)
+                ]
+                if rows != len(list_matrix[0]) or cols != len(list_matrix[0]):
+                    raise ValueError
+                return Matrix.from_list(list_matrix)
+
+        except FileNotFoundError:
+            print(f'Файл {filepath} не найден.')
+        except ValueError:
+            print(f'Файл {filepath} содержит некорректные данные.')
+        except Exception as e:
+            print(f'Произошла ошибка: {e}')
+
+    @staticmethod
+    def indentity(n: int) -> Matrix:
+        return Matrix.from_list(
+            [[int(i == j) for j in range(n)] for i in range(n)]
+        )
+
     def copy(self) -> Matrix:
-        return Matrix(from_list=[row[:] for row in self.__matrix])
+        lst = [row[:] for row in self.__matrix]
+        return Matrix.from_list(lst)
 
     def rows_count(self) -> int:
         return self.__rows
@@ -63,7 +99,7 @@ class Matrix:
         except FileNotFoundError:
             print(f'Файл {path} не найден.')
         except ValueError:
-            print(f'Файл содержит некорректные данные.')
+            print('Файл содержит некорректные данные.')
         except Exception as e:
             print(f'Произошла ошибка: {e}')
 
@@ -80,11 +116,6 @@ class Matrix:
             )
             for i in range(self.__rows)
         )
-
-    def get_column(self, index: int) -> Matrix:
-        return Matrix(from_list=[
-            [self[row][index]] for row in range(self.__rows)
-        ])
 
     def __getitem__(self, index: int | tuple[int, int]) -> float:
         if isinstance(index, int):
@@ -151,29 +182,17 @@ class Matrix:
 
             return result
 
+    def get_column(self, index: int) -> Matrix:
+        return Matrix(from_list=[
+            [self[row][index]] for row in range(self.__rows)
+        ])
+
     def minor(self, row: int, column: int) -> Matrix:
         minor = Matrix(from_list=[
             [self.__matrix[i][j] for j in range(self.__cols) if j != column]
             for i in range(self.__rows) if i != row
         ])
         return minor
-
-    def lu_decomposition(self) -> tuple[Matrix, Matrix]:
-        n, m = self.rows_cols_count()
-        l, u = Matrix(n, m, is_indentity=True), Matrix(n, m)
-
-        for i in range(n):
-            for k in range(i, n):
-                total = sum(l[i][j] * u[j][k] for j in range(i))
-                u[i][k] = self[i][k] - total
-
-            for k in range(i, n):
-                total = sum(l[k][j] * u[j][i] for j in range(i))
-                # Реализовать выбор главного элемента
-                # Помнить число перестановок
-                l[k][i] = (self[k][i] - total) / u[i][i]
-
-        return l, u
 
     def determinant(self) -> int | float:
         n = self.rows_cols_count()[0]
@@ -190,145 +209,18 @@ class Matrix:
 
         return det
 
-    def inverse_matrix_lu(self) -> Matrix:
-        rows, columns = self.rows_cols_count()
-        indentity_matrix = Matrix(rows, columns, is_indentity=True)
-        inverse_matrix = Matrix(rows, columns)
-
-        for i in range(rows):
-            indentity_column = indentity_matrix.get_column(i)
-            inverse_matrix[i] = solve_lu(self, indentity_column)
-
-        return inverse_matrix
-
-
-def solve_lu(A: Matrix, b: Matrix) -> Matrix:
-    if A.rows_count() != b.rows_count():
-        raise ValueError('Количество строк матриц A и b должно совпадать.')
-
-    n = b.rows_count()
-    l, u = A.lu_decomposition()
-
-    y = Matrix(n, 1)
-    for i in range(n):
-        total = sum(l[i][j] * y[j][0] for j in range(i))
-        y[i][0] = b[i][0] - total
-
-    x = Matrix(n, 1)
-    for i in reversed(range(n)):
-        total = sum(u[i][j] * x[j][0] for j in range(i + 1, n))
-        x[i][0] = (y[i][0] - total) / u[i][i]
-
-    return x
-
-
-def is_equal_with_accuracy(a, b, rel_tol=1e-9, abs_tol=1e-9) -> bool:
-    return math.isclose(a, b, rel_tol=rel_tol, abs_tol=abs_tol)
-
-
-def check_solution(A: Matrix, b: Matrix, x: Matrix) -> bool:
-    for row in range(A.rows_count()):
-        total = 0
-        for column in range(A.cols_count()):
-            total += A[row][column] * x[column][0]
-        if not is_equal_with_accuracy(total, b[row][0]):
+    def is_symmetric(self) -> bool:
+        if self.rows_count() != self.cols_count():
             return False
-    return True
+        for i in range(self.__rows):
+            for j in range(i + 1, self.__cols):
+                if not is_equal_with_accuracy(self[i][j], self[j][i]):
+                    return False
+        return True
 
-
-def get_three_diagonals(
-    matrix: Matrix
-) -> tuple[list[float], list[float], list[float]]:
-    a, b, c = [], [], []
-
-    for i in range(matrix.rows_count()):
-        for j in range(matrix.cols_count()):
-            elem = matrix[i][j]
-            if i == j + 1:
-                a.append(elem)
-            elif i == j:
-                b.append(elem)
-            elif i == j - 1:
-                c.append(elem)
-
-    return a, b, c
-
-
-def thomas_algorithm(A: Matrix, d: Matrix) -> Matrix:
-    n = d.rows_count()
-    a, b, c = get_three_diagonals(A)
-
-    if len(a) != n - 1 or len(b) != n or len(c) != n - 1:
-        raise ValueError(
-            'Неверные длины диагоналей. '
-            'Ожидаемые длины: a = n - 1, b = n, c = n - 1'
-        )
-
-    alpha = [0] * n
-    beta = [0] * n
-    x = [0] * n
-
-    alpha[0] = c[0] / b[0]
-    beta[0] = d[0][0] / b[0]
-
-    for i in range(1, n):
-        a_i = a[i - 1] if i < n else 0
-        c_i = c[i] if i < n - 1 else 0
-
-        denominator = b[i] - a_i * alpha[i - 1]
-        alpha[i] = c_i / denominator if i < n - 1 else 0
-        beta[i] = (d[i][0] - a_i * beta[i - 1]) / denominator
-
-    x[-1] = beta[-1]
-    for i in reversed(range(n - 1)):
-        x[i] = beta[i] - alpha[i] * x[i + 1]
-
-    return Matrix(from_list=[[elem] for elem in x])
-
-
-def jacobi(
-    A: Matrix, b: Matrix,
-    tol: float = 1e-9, max_iterations: int = 1000
-) -> Matrix:
-    n = b.rows_count()
-    x = Matrix(n, 1)
-
-    for k in range(max_iterations):
-        print(f'iter: {k}')
-        x_new = Matrix(n, 1)
-        for i in range(n):
-            sigma = sum(A[i][j] * x[j][0] for j in range(n) if i != j)
-            x_new[i][0] = (b[i][0] - sigma) / A[i][i]
-
-        diff = max(abs(x_new[i][0] - x[i][0]) for i in range(n))
-        if diff < tol:
-            break
-
-        x = x_new.copy()
-
-    return x
-
-
-def seidel(
-    A: Matrix, b: Matrix,
-    tol: float = 1e-9, max_iterations: int = 1000
-) -> Matrix:
-    n = b.rows_count()
-    x = Matrix(n, 1)
-
-    for _ in range(max_iterations):
-        print(f'iter: {_}')
-        x_new = x.copy()
-
-        for i in range(n):
-            sum1 = sum(A[i][j] * x_new[j][0] for j in range(i))
-            sum2 = sum(A[i][j] * x[j][0] for j in range(i + 1, n))
-            x_new[i][0] = (b[i][0] - sum1 - sum2) / A[i][i]
-
-        converge = all(abs(x_new[i][0] - x[i][0]) < tol for i in range(n))
-        if converge:
-            break
-
-        x = x_new
-
-    return x
+    def transpose(self) -> Matrix:
+        transposed = [
+            [self[j][i] for j in range(self.__rows)]
+            for i in range(self.__cols)
+        ]
+        return Matrix(from_list=transposed)
